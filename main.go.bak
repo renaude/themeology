@@ -1,0 +1,116 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"math/rand"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"time"
+
+	"themeology.local/discord"
+	"themeology.local/waybar"
+)
+
+func CheckError(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func ExecuteHellwal(filename string) {
+	cmd := exec.Command("hellwal", "-i", filename)
+	stdout, err := cmd.Output()
+	CheckError(err)
+	fmt.Println(string(stdout))
+}
+
+func ExecuteSWWW(filename string) {
+	cmd := exec.Command("swww", "img", filename)
+	stdout, err := cmd.Output()
+	CheckError(err)
+	fmt.Println(string(stdout))
+}
+
+func ExecuteThemecord() {
+	cmd := exec.Command("themecord", "-g")
+	stdout, err := cmd.Output()
+	CheckError(err)
+	fmt.Println(string(stdout))
+}
+
+func GetRandomImage(wallpapers string) string {
+	files, err := os.ReadDir(wallpapers)
+	CheckError(err)
+
+	min := 0
+	max := len(files) - 1
+
+	randomIndex := rand.Intn(max-min+1) + min
+	randomImage := files[randomIndex].Name()
+
+	return randomImage
+}
+
+func SourceVariables(config string) {
+	cmd := exec.Command("source", fmt.Sprintf("%s/variables.sh", config))
+	stdout, err := cmd.Output()
+	CheckError(err)
+	fmt.Println(string(stdout))
+}
+
+func SourceTerminals(config string) {
+	cmd := exec.Command("sh", fmt.Sprintf("%s/terminal.sh", config))
+	stdout, err := cmd.Output()
+	CheckError(err)
+	fmt.Println(string(stdout))
+}
+
+func ApplyThemeology() {
+	homedir, err := os.UserHomeDir()
+	CheckError(err)
+
+	config := filepath.Join(homedir, "./.config/hellwal")
+	wallpapers := filepath.Join(homedir, "./wallpapers")
+
+	fmt.Printf("Config Path: %s\n", config)
+	fmt.Printf("Wallpapers Path: %s\n", wallpapers)
+
+	filename := GetRandomImage(wallpapers)
+
+	fullpath := fmt.Sprintf("%s/%s", wallpapers, filename)
+
+	ExecuteHellwal(fullpath)
+	ExecuteSWWW(fullpath)
+
+	fmt.Println("Generating CSS")
+
+	discordcss := discord.ParseDiscord(filepath.Join(homedir, "./.cache/hellwal/cache/", fmt.Sprintf("%s.hellwal", filename)))
+	waybarcss := waybar.ParseWaybar(filepath.Join(homedir, "./.cache/hellwal/cache/", fmt.Sprintf("%s.hellwal", filename)))
+
+	discord.WriteDiscord(filepath.Join(homedir, "./.cache/hellwal/discord-colors.css"), discordcss)
+	waybar.WriteWaybar(filepath.Join(homedir, "./.cache/hellwal/waybar-colors.css"), waybarcss)
+
+	waybar.CopyWaybar(filepath.Join(homedir, "./.cache/hellwal/waybar-colors.css"), filepath.Join(homedir, "./.config/waybar/colors.css"))
+
+	ExecuteThemecord()
+
+	// SourceVariables(config)
+	// SourceTerminals(config)
+}
+
+func main() {
+	ApplyThemeology()
+
+	applyTicker := time.NewTicker(5 * time.Minute)
+
+	func() {
+		for {
+			select {
+			case <-applyTicker.C:
+				ApplyThemeology()
+			}
+		}
+	}()
+}
